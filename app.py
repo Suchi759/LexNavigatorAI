@@ -8,6 +8,7 @@ from io import BytesIO
 # ➕ ADDED
 from gtts import gTTS
 import tempfile
+import time
 
 # ================= UI =================
 st.set_page_config(page_title="LexNavigator ⚖️", layout="wide")
@@ -93,6 +94,16 @@ if "chat" not in st.session_state:
 # ================= MODEL =================
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
+# ================= LANGUAGE =================
+lang = st.sidebar.selectbox("🌐 Language", ["English", "Hindi", "Telugu"])
+
+def lang_rule():
+    if lang == "Hindi":
+        return "Answer ONLY in Hindi."
+    elif lang == "Telugu":
+        return "Answer ONLY in Telugu."
+    return "Answer ONLY in English."
+
 # ================= PDF =================
 def extract_pdf(file):
     try:
@@ -124,19 +135,23 @@ def ask_ai(query):
     context = retrieve(query, all_chunks)
 
     if not context:
-        return """
+        return f"""
+{lang_rule()}
+
 🧾 Answer: No relevant legal data found
-⚖️ Legal Reasoning: No matching clauses in uploaded documents
+⚖️ Legal Reasoning: No matching clauses
 🚨 Risk Level: Low
 📌 Key Clauses: None
 """
 
     return f"""
+{lang_rule()}
+
 🧾 Answer:
 The query matches your legal documents.
 
 ⚖️ Legal Reasoning:
-Semantic search found relevant legal clauses.
+Semantic search found relevant clauses.
 
 🚨 Risk Level:
 Medium (requires review)
@@ -148,7 +163,7 @@ Medium (requires review)
 • {context[3] if len(context)>3 else 'N/A'}
 """
 
-# ================= FORMAT OUTPUT =================
+# ================= FORMAT =================
 def format_ai(text):
     sections = text.split("\n")
     html = "<div class='card'>"
@@ -168,27 +183,17 @@ def format_ai(text):
     html += "</div>"
     return html
 
-# ================= ➕ ADDED: SUMMARY FORMAT =================
-def format_summary(text):
-    parts = text.split("\n")
+# ================= TYPE ANIMATION =================
+def type_writer(text):
+    box = st.empty()
+    out = ""
 
-    return f"""
-    <div class='card'>
+    for char in text:
+        out += char
+        box.markdown(f"<div class='card'>{format_ai(out)}</div>", unsafe_allow_html=True)
+        time.sleep(0.01)
 
-    <h3 style='color:#00d4ff'>📌 DOCUMENT SUMMARY</h3>
-
-    <p style='color:#a855f7'><b>🧾 Answer:</b><br>{parts[0] if len(parts)>0 else ''}</p>
-
-    <p style='color:#22c55e'><b>⚖️ Legal Reasoning:</b><br>{parts[1] if len(parts)>1 else ''}</p>
-
-    <p style='color:#ff3d81'><b>🚨 Risk Level:</b><br>{parts[2] if len(parts)>2 else ''}</p>
-
-    <p style='color:#fbbf24'><b>📌 Key Clauses:</b><br>{parts[3] if len(parts)>3 else ''}</p>
-
-    </div>
-    """
-
-# ================= ➕ ADDED: VOICE =================
+# ================= VOICE =================
 def speak(text):
     try:
         tts = gTTS(text[:300])
@@ -220,7 +225,7 @@ for role, msg in st.session_state.chat:
         st.markdown(format_ai(msg), unsafe_allow_html=True)
 
 # ================= INPUT =================
-query = st.text_input("Ask legal question")
+query = st.text_input("Ask question")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -231,32 +236,45 @@ with col2:
     summary = st.button("📌 Summary")
 
 with col3:
-    compare = st.button("⚖️ Compare")
+    compare = st.button("📊 Compare")
 
 with col4:
     download = st.button("⬇ Download Report")
 
-# ================= ACTIONS =================
+# ================= SEND =================
 if send and query:
     st.session_state.chat.append(("user", query))
-    response = ask_ai(query)
-    st.session_state.chat.append(("ai", response))
-    st.markdown(format_ai(response), unsafe_allow_html=True)
 
-# ================= ➕ ADDED SUMMARY + VOICE =================
+    response = ask_ai(query)
+
+    type_writer(response)   # 🔥 typing animation
+
+    st.session_state.chat.append(("ai", response))
+
+    speak(response)         # 🔊 voice output
+
+# ================= SUMMARY =================
 if summary:
     all_text = "\n".join([" ".join(v) for v in st.session_state.docs.values()])[:3000]
 
     summary_text = f"""
-Based on uploaded documents.
-Legal reasoning applied.
-Medium risk detected.
-Important clauses extracted.
+{lang_rule()}
+
+📌 Summary:
+Documents analyzed successfully.
+
+⚖️ Legal Reasoning:
+Key legal patterns extracted.
+
+🚨 Risk Level:
+Medium
+
+📌 Key Clauses:
+Important clauses found in documents.
 """
 
-    st.markdown(format_summary(summary_text), unsafe_allow_html=True)
+    st.markdown(f"<div class='card'>{format_ai(summary_text)}</div>", unsafe_allow_html=True)
 
-    # 🔊 VOICE OUTPUT
     speak(summary_text)
 
 # ================= COMPARE =================
