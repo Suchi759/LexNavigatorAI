@@ -13,10 +13,20 @@ genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 model = genai.GenerativeModel("gemini-2.5-flash")
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
-# ================= CACHE (IMPORTANT) =================
+# ================= GLOBAL CACHE (VERY IMPORTANT) =================
 @st.cache_data(show_spinner=False)
 def cached_gemini(prompt):
     return model.generate_content(prompt).text
+
+# ================= LANGUAGE =================
+lang = st.sidebar.selectbox("🌐 Language", ["English", "Hindi", "Telugu"])
+
+def lang_instruction():
+    if lang == "Hindi":
+        return "Answer ONLY in Hindi."
+    elif lang == "Telugu":
+        return "Answer ONLY in Telugu."
+    return "Answer ONLY in English."
 
 # ================= UI =================
 st.set_page_config(page_title="LexNavigator ⚖️", layout="wide")
@@ -27,7 +37,6 @@ st.markdown("""
     background: radial-gradient(circle at top, #06142e, #020617, #0b0f1a);
     color: white;
 }
-
 .title {
     font-size: 3rem;
     text-align: center;
@@ -36,14 +45,12 @@ st.markdown("""
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
-
 .chat-user {
     background:#1e293b;
     padding:10px;
     border-radius:10px;
     margin:5px;
 }
-
 .chat-ai {
     background:#0f172a;
     border-left:3px solid #00d4ff;
@@ -51,7 +58,6 @@ st.markdown("""
     border-radius:10px;
     margin:5px;
 }
-
 .stButton>button {
     background: linear-gradient(90deg,#00d4ff,#a855f7,#ff3d81);
     color:white;
@@ -100,7 +106,14 @@ def retrieve(query, chunks):
     top = np.argsort(scores)[-4:][::-1]
     return [chunks[i] for i in top]
 
-# ================= TTS =================
+# ================= SAFE CALL (ANTI-QUOTA CRASH) =================
+def safe_gemini(prompt):
+    try:
+        return cached_gemini(prompt)
+    except Exception as e:
+        return "⚠️ limit reached,Please wait or try later."
+
+# ================= TEXT TO SPEECH =================
 def speak(text):
     try:
         tts = gTTS(text[:300])
@@ -110,7 +123,7 @@ def speak(text):
     except:
         pass
 
-# ================= FORMAT OUTPUT =================
+# ================= FORMAT =================
 def format_ai(text):
     text = text.replace("🧾", "<span style='color:#00d4ff'>🧾</span>")
     text = text.replace("⚖️", "<span style='color:#a855f7'>⚖️</span>")
@@ -132,14 +145,17 @@ st.sidebar.write("Stored Docs:")
 for name in st.session_state.docs:
     st.sidebar.write("📄", name)
 
-# ================= CHAT HISTORY =================
+st.sidebar.markdown("---")
+st.sidebar.write("🌐 Language Mode:", lang)
+
+# ================= CHAT =================
 for role, msg in st.session_state.chat:
     if role == "user":
         st.markdown(f"<div class='chat-user'>🧑 {msg}</div>", unsafe_allow_html=True)
     else:
         st.markdown(f"<div class='chat-ai'>{format_ai(msg)}</div>", unsafe_allow_html=True)
 
-# ================= AI ENGINE =================
+# ================= CORE AI =================
 def ask_ai(query):
     if not query.strip():
         return "Please enter a question."
@@ -151,19 +167,21 @@ def ask_ai(query):
     context = retrieve(query, all_chunks)
 
     prompt = f"""
+{lang_instruction()}
+
 You are a legal AI assistant.
 
-Return STRICTLY:
+Return STRICT FORMAT:
 
-🧾 Answer: 3-5 lines
-⚖️ Legal Reasoning: 3-4 lines
-🚨 Risk Level: Low/Medium/High + reason (1 line)
-📌 Key Clauses: max 4 bullets
+🧾 Answer: max 10 lines
+⚖️ Legal Reasoning: max 5 lines
+🚨 Risk Level: Low / Medium / High (1 line)
+📌 Key Clauses: max 5 bullets
 
 RULES:
-- Max 120-150 words
-- Be very concise
+- Very short answers
 - No extra explanation
+- Max 150 words
 
 Context:
 {chr(10).join(context)}
@@ -172,14 +190,12 @@ Question:
 {query}
 """
 
-    try:
-        return cached_gemini(prompt)
-    except Exception as e:
-        return f"⚠️ Gemini error (quota/API issue): {str(e)}"
+    return safe_gemini(prompt)
 
 # ================= INPUT =================
-query = st.text_input("Ask legal question...")
+query = st.text_input("Ask  question...")
 
+# IMPORTANT: prevent duplicate calls
 if st.button("⚡ Send") and query:
     st.session_state.chat.append(("user", query))
 
@@ -191,16 +207,22 @@ if st.button("⚡ Send") and query:
 
     speak(response)
 
-# ================= SUMMARY =================
+# ================= SUMMARY (ONLY ON CLICK, SINGLE CALL) =================
 if st.button("📌 Summary"):
-    all_text = "\n".join([" ".join(v) for v in st.session_state.docs.values()])[:3000]
+    all_text = "\n".join([" ".join(v) for v in st.session_state.docs.values()])[:2500]
 
-    try:
-        st.write(cached_gemini("Summarize in 5 bullets:\n" + all_text))
-    except Exception as e:
-        st.warning(str(e))
+    prompt = f"""
+{lang_instruction()}
 
-# ================= COMPARE =================
+Summarize legal document in 5 bullet points only.
+
+TEXT:
+{all_text}
+"""
+
+    st.write(safe_gemini(prompt))
+
+# ================= COMPARE (ONLY 1 CALL) =================
 file1 = st.file_uploader("OLD PDF", type=["pdf"])
 file2 = st.file_uploader("NEW PDF", type=["pdf"])
 
@@ -210,18 +232,20 @@ if file1 and file2:
 
     if st.button("Compare"):
         prompt = f"""
-Compare OLD vs NEW contract and show ONLY differences:
+{lang_instruction()}
+
+Compare OLD vs NEW contract.
+
+Give ONLY differences in bullet points.
 
 OLD:
-{t1[:2000]}
+{t1[:1500]}
 
 NEW:
-{t2[:2000]}
+{t2[:1500]}
 """
-        try:
-            st.write(cached_gemini(prompt))
-        except Exception as e:
-            st.warning(str(e))
+
+        st.write(safe_gemini(prompt))
 
 # ================= PDF EXPORT =================
 def make_pdf(text):
