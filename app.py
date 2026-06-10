@@ -5,7 +5,6 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 from gtts import gTTS
 import tempfile
-import time
 from reportlab.pdfgen import canvas
 from io import BytesIO
 
@@ -13,6 +12,11 @@ from io import BytesIO
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 model = genai.GenerativeModel("gemini-2.5-flash")
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
+
+# ================= CACHE (IMPORTANT) =================
+@st.cache_data(show_spinner=False)
+def cached_gemini(prompt):
+    return model.generate_content(prompt).text
 
 # ================= UI =================
 st.set_page_config(page_title="LexNavigator ⚖️", layout="wide")
@@ -76,8 +80,8 @@ def extract_pdf(file):
             if t:
                 text += t
         return text[:20000]
-    except Exception as e:
-        return f""
+    except:
+        return ""
 
 def chunk(text):
     return text.split(". ")
@@ -137,6 +141,9 @@ for role, msg in st.session_state.chat:
 
 # ================= AI ENGINE =================
 def ask_ai(query):
+    if not query.strip():
+        return "Please enter a question."
+
     all_chunks = []
     for d in st.session_state.docs.values():
         all_chunks.extend(d)
@@ -146,17 +153,17 @@ def ask_ai(query):
     prompt = f"""
 You are a legal AI assistant.
 
-Return STRICTLY in this format:
+Return STRICTLY:
 
-🧾 Answer: max 4-5 lines
-⚖️ Legal Reasoning: max 4 lines
-🚨 Risk Level: Low / Medium / High + reason
+🧾 Answer: 3-5 lines
+⚖️ Legal Reasoning: 3-4 lines
+🚨 Risk Level: Low/Medium/High + reason (1 line)
 📌 Key Clauses: max 4 bullets
 
 RULES:
-- Max 150 words
+- Max 120-150 words
 - Be very concise
-- No extra text
+- No extra explanation
 
 Context:
 {chr(10).join(context)}
@@ -166,9 +173,9 @@ Question:
 """
 
     try:
-        return model.generate_content(prompt).text
+        return cached_gemini(prompt)
     except Exception as e:
-        return f"⚠️ Gemini error: {str(e)}"
+        return f"⚠️ Gemini error (quota/API issue): {str(e)}"
 
 # ================= INPUT =================
 query = st.text_input("Ask legal question...")
@@ -187,9 +194,9 @@ if st.button("⚡ Send") and query:
 # ================= SUMMARY =================
 if st.button("📌 Summary"):
     all_text = "\n".join([" ".join(v) for v in st.session_state.docs.values()])[:3000]
+
     try:
-        res = model.generate_content("Summarize in 5 bullets:\n" + all_text).text
-        st.write(res)
+        st.write(cached_gemini("Summarize in 5 bullets:\n" + all_text))
     except Exception as e:
         st.warning(str(e))
 
@@ -203,7 +210,7 @@ if file1 and file2:
 
     if st.button("Compare"):
         prompt = f"""
-Compare OLD vs NEW contract and show only differences:
+Compare OLD vs NEW contract and show ONLY differences:
 
 OLD:
 {t1[:2000]}
@@ -212,7 +219,7 @@ NEW:
 {t2[:2000]}
 """
         try:
-            st.write(model.generate_content(prompt).text)
+            st.write(cached_gemini(prompt))
         except Exception as e:
             st.warning(str(e))
 
