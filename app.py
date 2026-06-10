@@ -2,10 +2,10 @@ import streamlit as st
 from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
 import numpy as np
-from gtts import gTTS
-import tempfile
 from reportlab.pdfgen import canvas
 from io import BytesIO
+from gtts import gTTS
+import tempfile
 
 # ================= UI =================
 st.set_page_config(page_title="LexNavigator ⚖️", layout="wide")
@@ -32,6 +32,7 @@ st.markdown("""
     border-left:4px solid #00d4ff;
     border-radius:12px;
     margin:10px 0;
+    line-height:1.6;
 }
 
 .user {
@@ -40,18 +41,20 @@ st.markdown("""
     border-radius:10px;
 }
 
+/* SUMMARY STYLES */
 .summary-box {
     background:#0b1220;
-    padding:15px;
-    border-radius:12px;
+    padding:18px;
+    border-radius:14px;
     border:1px solid #1e293b;
-    margin-top:10px;
+    margin-top:15px;
 }
 
-.s1 {color:#00d4ff; font-weight:700;}
-.s2 {color:#a855f7; font-weight:700;}
-.s3 {color:#ff3d81; font-weight:700;}
-.s4 {color:#22c55e; font-weight:700;}
+.s-title {color:#00d4ff; font-size:20px; font-weight:800;}
+.s-answer {color:#a855f7; font-weight:600;}
+.s-reason {color:#22c55e; font-weight:600;}
+.s-risk {color:#ff3d81; font-weight:700;}
+.s-clause {color:#fbbf24; font-weight:500;}
 
 .stButton>button {
     border-radius:12px;
@@ -104,13 +107,13 @@ def ask_ai(query):
     context = retrieve(query, all_chunks)
 
     if not context:
-        return """No relevant legal data found."""
+        return "No relevant legal data found."
 
     return f"""
 Answer:
-Legal reasoning based on document similarity.
-Risk: Medium
-Clauses:
+Legal reasoning from document match.
+Risk Level: Medium
+Key Clauses:
 - {context[0] if len(context)>0 else ''}
 - {context[1] if len(context)>1 else ''}
 - {context[2] if len(context)>2 else ''}
@@ -118,7 +121,7 @@ Clauses:
 
 # ================= FORMAT CHAT =================
 def format_ai(text):
-    return f"<div class='card'>{text.replace('Answer','🧾 Answer').replace('Risk','🚨 Risk')}</div>"
+    return f"<div class='card'>{text}</div>"
 
 # ================= VOICE =================
 def speak(text):
@@ -152,7 +155,7 @@ for role, msg in st.session_state.chat:
         st.markdown(f"<div class='card'>{msg}</div>", unsafe_allow_html=True)
 
 # ================= INPUT =================
-query = st.text_input("Ask question")
+query = st.text_input("Ask  question")
 
 col1, col2 = st.columns(2)
 
@@ -162,34 +165,56 @@ summary = col2.button("📌 Summary + Voice")
 # ================= SEND =================
 if send and query:
     st.session_state.chat.append(("user", query))
-
     response = ask_ai(query)
-
     st.session_state.chat.append(("ai", response))
-
     st.markdown(format_ai(response), unsafe_allow_html=True)
 
 # ================= BEAUTIFUL SUMMARY =================
 def build_summary(text):
-    return f"""
-<div class='summary-box'>
+    parts = text.split("\n")
 
-<h3 class='s1'>📌 DOCUMENT SUMMARY</h3>
+    answer = parts[1] if len(parts) > 1 else ""
+    reason = parts[2] if len(parts) > 2 else ""
+    risk = parts[3] if len(parts) > 3 else ""
+    clause = parts[4] if len(parts) > 4 else ""
 
-<p class='s2'>• {text.split('. ')[0] if '. ' in text else text}</p>
-<p class='s3'>• {text.split('. ')[1] if len(text.split('. '))>1 else ''}</p>
-<p class='s4'>• {text.split('. ')[2] if len(text.split('. '))>2 else ''}</p>
+    html = f"""
+    <div class='summary-box'>
 
-</div>
-"""
+    <div class='s-title'>📌 DOCUMENT SUMMARY</div><br>
+
+    <div class='s-answer'>🧾 Answer:</div>
+    {answer}<br><br>
+
+    <div class='s-reason'>⚖️ Legal Reasoning:</div>
+    {reason}<br><br>
+
+    <div class='s-risk'>🚨 Risk Level:</div>
+    {risk}<br><br>
+
+    <div class='s-clause'>📌 Key Clauses:</div>
+    {clause}<br>
+
+    </div>
+    """
+    return html
 
 # ================= SUMMARY + VOICE =================
 if summary:
     all_text = "\n".join([" ".join(v) for v in st.session_state.docs.values()])[:3000]
 
-    st.markdown(build_summary(all_text), unsafe_allow_html=True)
+    summary_text = f"""
+Answer:
+Based on uploaded documents.
+Legal reasoning applied.
+Risk Level: Medium
+Key Clauses:
+{all_text.split('. ')[0] if '. ' in all_text else ''}
+"""
 
-    speak("This is a summary of uploaded legal documents.")
+    st.markdown(build_summary(summary_text), unsafe_allow_html=True)
+
+    speak("Here is the summary of your legal documents.")
 
 # ================= PDF EXPORT =================
 def make_pdf(text):
