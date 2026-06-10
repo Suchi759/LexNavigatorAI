@@ -3,7 +3,6 @@ import google.generativeai as genai
 from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
 import numpy as np
-import faiss
 from gtts import gTTS
 import tempfile
 import time
@@ -25,7 +24,6 @@ st.markdown("""
     color: white;
 }
 
-/* TITLE */
 .title {
     font-size: 3rem;
     text-align: center;
@@ -35,7 +33,6 @@ st.markdown("""
     -webkit-text-fill-color: transparent;
 }
 
-/* CHAT */
 .chat-user {
     background:#1e293b;
     padding:10px;
@@ -51,7 +48,6 @@ st.markdown("""
     margin:5px;
 }
 
-/* BUTTON */
 .stButton>button {
     background: linear-gradient(90deg,#00d4ff,#a855f7,#ff3d81);
     color:white;
@@ -80,33 +76,37 @@ def extract_pdf(file):
             if t:
                 text += t
         return text[:20000]
-    except:
-        return ""
+    except Exception as e:
+        return f""
 
 def chunk(text):
     return text.split(". ")
 
-# ================= EMBEDDING SEARCH =================
+# ================= EMBEDDING =================
 def retrieve(query, chunks):
     if not chunks:
         return []
 
-    q = embedder.encode([query])[0]
+    q = embedder.encode(query)
     c = embedder.encode(chunks)
 
+    q = np.array(q)
     scores = np.dot(c, q)
-    top = np.argsort(scores)[-4:][::-1]
 
+    top = np.argsort(scores)[-4:][::-1]
     return [chunks[i] for i in top]
 
-# ================= TEXT TO SPEECH =================
+# ================= TTS =================
 def speak(text):
-    tts = gTTS(text[:300])
-    path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
-    tts.save(path)
-    st.audio(path)
+    try:
+        tts = gTTS(text[:300])
+        path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
+        tts.save(path)
+        st.audio(path)
+    except:
+        pass
 
-# ================= COLOR FORMAT =================
+# ================= FORMAT OUTPUT =================
 def format_ai(text):
     text = text.replace("🧾", "<span style='color:#00d4ff'>🧾</span>")
     text = text.replace("⚖️", "<span style='color:#a855f7'>⚖️</span>")
@@ -148,18 +148,18 @@ You are a legal AI assistant.
 
 Return STRICTLY in this format:
 
-🧾 Answer: max 5-10 lines
-⚖️ Legal Reasoning: max 5 lines
-🚨 Risk Level: Low / Medium / High + 1 line reason
-📌 Key Clauses: max 4 bullet points
+🧾 Answer: max 4-5 lines
+⚖️ Legal Reasoning: max 4 lines
+🚨 Risk Level: Low / Medium / High + reason
+📌 Key Clauses: max 4 bullets
 
 RULES:
-- Be extremely concise
-- No long paragraphs
-- Max 150 words total
+- Max 150 words
+- Be very concise
+- No extra text
 
 Context:
-{context}
+{chr(10).join(context)}
 
 Question:
 {query}
@@ -167,8 +167,8 @@ Question:
 
     try:
         return model.generate_content(prompt).text
-    except:
-        return "⚠️ Error"
+    except Exception as e:
+        return f"⚠️ Gemini error: {str(e)}"
 
 # ================= INPUT =================
 query = st.text_input("Ask legal question...")
@@ -187,12 +187,11 @@ if st.button("⚡ Send") and query:
 # ================= SUMMARY =================
 if st.button("📌 Summary"):
     all_text = "\n".join([" ".join(v) for v in st.session_state.docs.values()])[:3000]
-    prompt = "Summarize legal document in 5 bullet points:\n" + all_text
-
     try:
-        st.write(model.generate_content(prompt).text)
-    except:
-        st.warning("Limit reached")
+        res = model.generate_content("Summarize in 5 bullets:\n" + all_text).text
+        st.write(res)
+    except Exception as e:
+        st.warning(str(e))
 
 # ================= COMPARE =================
 file1 = st.file_uploader("OLD PDF", type=["pdf"])
@@ -204,29 +203,29 @@ if file1 and file2:
 
     if st.button("Compare"):
         prompt = f"""
-Compare OLD vs NEW contract:
+Compare OLD vs NEW contract and show only differences:
 
 OLD:
 {t1[:2000]}
 
 NEW:
 {t2[:2000]}
-
-Give only key differences in bullet points.
 """
         try:
             st.write(model.generate_content(prompt).text)
-        except:
-            st.warning("Too large")
+        except Exception as e:
+            st.warning(str(e))
 
-# ================= PDF REPORT =================
+# ================= PDF EXPORT =================
 def make_pdf(text):
     buffer = BytesIO()
     c = canvas.Canvas(buffer)
     y = 800
+
     for line in text.split("\n")[:40]:
         c.drawString(40, y, line[:100])
         y -= 15
+
     c.save()
     buffer.seek(0)
     return buffer
