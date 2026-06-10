@@ -5,7 +5,6 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 from gtts import gTTS
 import tempfile
-import time
 from reportlab.pdfgen import canvas
 from io import BytesIO
 
@@ -23,36 +22,25 @@ st.markdown("""
     background: radial-gradient(circle at top, #06142e, #020617, #0b0f1a);
     color: white;
 }
-
 .title {
-    font-size: 3rem;
+    font-size: 2.8rem;
     text-align: center;
     font-weight: 900;
     background: linear-gradient(90deg,#00d4ff,#a855f7,#ff3d81);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
-
-.chat-user {
+.card {
+    background:#0f172a;
+    padding:12px;
+    border-left:4px solid #00d4ff;
+    border-radius:10px;
+    margin:8px 0;
+}
+.user {
     background:#1e293b;
     padding:10px;
     border-radius:10px;
-    margin:5px;
-}
-
-.chat-ai {
-    background:#0f172a;
-    border-left:3px solid #00d4ff;
-    padding:10px;
-    border-radius:10px;
-    margin:5px;
-}
-
-.stButton>button {
-    background: linear-gradient(90deg,#00d4ff,#a855f7,#ff3d81);
-    color:white;
-    border-radius:10px;
-    padding:10px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -70,14 +58,9 @@ if "docs" not in st.session_state:
 def extract_pdf(file):
     try:
         reader = PdfReader(file)
-        text = ""
-        for p in reader.pages:
-            t = p.extract_text()
-            if t:
-                text += t
-        return text[:20000]
-    except Exception as e:
-        return f""
+        return "".join([p.extract_text() or "" for p in reader.pages])[:20000]
+    except:
+        return ""
 
 def chunk(text):
     return text.split(". ")
@@ -86,27 +69,51 @@ def chunk(text):
 def retrieve(query, chunks):
     if not chunks:
         return []
-
     q = embedder.encode(query)
     c = embedder.encode(chunks)
-
     q = np.array(q)
     scores = np.dot(c, q)
-
     top = np.argsort(scores)[-4:][::-1]
     return [chunks[i] for i in top]
 
-# ================= TTS =================
-def speak(text):
-    try:
-        tts = gTTS(text[:300])
-        path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
-        tts.save(path)
-        st.audio(path)
-    except:
-        pass
+# ================= GEMINI (ONLY SEND) =================
+def ask_ai(query):
+    all_chunks = []
+    for d in st.session_state.docs.values():
+        all_chunks.extend(d)
 
-# ================= FORMAT OUTPUT =================
+    context = retrieve(query, all_chunks)
+
+    prompt = f"""
+You are a legal AI assistant.
+
+STRICT FORMAT:
+🧾 Answer: 4 lines max
+⚖️ Legal Reasoning: 3 lines max
+🚨 Risk Level: Low/Medium/High
+📌 Key Clauses: max 4 bullets
+
+RULES:
+- very concise
+- max 120 words
+
+Context:
+{chr(10).join(context)}
+
+Question:
+{query}
+"""
+
+    try:
+        return model.generate_content(prompt).text
+    except Exception:
+        return """🧾 Answer: API limit reached.
+⚖️ Legal Reasoning: Not available.
+🚨 Risk Level: Unknown.
+📌 Key Clauses:
+- Try later or upgrade API"""
+
+# ================= FORMAT =================
 def format_ai(text):
     text = text.replace("🧾", "<span style='color:#00d4ff'>🧾</span>")
     text = text.replace("⚖️", "<span style='color:#a855f7'>⚖️</span>")
@@ -128,50 +135,15 @@ st.sidebar.write("Stored Docs:")
 for name in st.session_state.docs:
     st.sidebar.write("📄", name)
 
-# ================= CHAT HISTORY =================
+# ================= CHAT =================
 for role, msg in st.session_state.chat:
     if role == "user":
-        st.markdown(f"<div class='chat-user'>🧑 {msg}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='user'>🧑 {msg}</div>", unsafe_allow_html=True)
     else:
-        st.markdown(f"<div class='chat-ai'>{format_ai(msg)}</div>", unsafe_allow_html=True)
-
-# ================= AI ENGINE =================
-def ask_ai(query):
-    all_chunks = []
-    for d in st.session_state.docs.values():
-        all_chunks.extend(d)
-
-    context = retrieve(query, all_chunks)
-
-    prompt = f"""
-You are a legal AI assistant.
-
-Return STRICTLY in this format:
-
-🧾 Answer: max 4-5 lines
-⚖️ Legal Reasoning: max 4 lines
-🚨 Risk Level: Low / Medium / High + reason
-📌 Key Clauses: max 4 bullets
-
-RULES:
-- Max 150 words
-- Be very concise
-- No extra text
-
-Context:
-{chr(10).join(context)}
-
-Question:
-{query}
-"""
-
-    try:
-        return model.generate_content(prompt).text
-    except Exception as e:
-        return f"⚠️ Gemini error: {str(e)}"
+        st.markdown(f"<div class='card'>{format_ai(msg)}</div>", unsafe_allow_html=True)
 
 # ================= INPUT =================
-query = st.text_input("Ask legal question...")
+query = st.text_input("Ask legal question")
 
 if st.button("⚡ Send") and query:
     st.session_state.chat.append(("user", query))
@@ -180,41 +152,43 @@ if st.button("⚡ Send") and query:
 
     st.session_state.chat.append(("ai", response))
 
-    st.markdown(f"<div class='chat-ai'>{format_ai(response)}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='card'>{format_ai(response)}</div>", unsafe_allow_html=True)
 
-    speak(response)
-
-# ================= SUMMARY =================
+# ================= OFFLINE SUMMARY (NO GEMINI) =================
 if st.button("📌 Summary"):
     all_text = "\n".join([" ".join(v) for v in st.session_state.docs.values()])[:3000]
-    try:
-        res = model.generate_content("Summarize in 5 bullets:\n" + all_text).text
-        st.write(res)
-    except Exception as e:
-        st.warning(str(e))
 
-# ================= COMPARE =================
+    st.markdown("""
+    <div class='card'>
+    <b style='color:#00d4ff'>📌 Summary</b><br><br>
+    """, unsafe_allow_html=True)
+
+    for s in all_text.split(". ")[:6]:
+        st.write("•", s)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ================= OFFLINE COMPARE (NO GEMINI) =================
 file1 = st.file_uploader("OLD PDF", type=["pdf"])
 file2 = st.file_uploader("NEW PDF", type=["pdf"])
 
 if file1 and file2:
-    t1 = extract_pdf(file1)
-    t2 = extract_pdf(file2)
-
     if st.button("Compare"):
-        prompt = f"""
-Compare OLD vs NEW contract and show only differences:
+        t1 = extract_pdf(file1)
+        t2 = extract_pdf(file2)
 
-OLD:
-{t1[:2000]}
+        a = set(t1.split())
+        b = set(t2.split())
 
-NEW:
-{t2[:2000]}
-"""
-        try:
-            st.write(model.generate_content(prompt).text)
-        except Exception as e:
-            st.warning(str(e))
+        st.markdown("""
+        <div class='card'>
+        <b style='color:#ff3d81'>📌 Differences</b><br><br>
+        """, unsafe_allow_html=True)
+
+        st.write("Added:", list(b - a)[:30])
+        st.write("Removed:", list(a - b)[:30])
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # ================= PDF EXPORT =================
 def make_pdf(text):
