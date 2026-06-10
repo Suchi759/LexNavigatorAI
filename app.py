@@ -13,7 +13,6 @@ from io import BytesIO
 # ================= CONFIG =================
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 model = genai.GenerativeModel("gemini-2.5-flash")
-
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
 # ================= UI =================
@@ -36,7 +35,7 @@ st.markdown("""
     -webkit-text-fill-color: transparent;
 }
 
-/* CHAT BOX */
+/* CHAT */
 .chat-user {
     background:#1e293b;
     padding:10px;
@@ -62,7 +61,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='title'>⚖️ LexNavigator </div>", unsafe_allow_html=True)
+st.markdown("<div class='title'>⚖️ LexNavigator</div>", unsafe_allow_html=True)
 
 # ================= SESSION =================
 if "chat" not in st.session_state:
@@ -71,7 +70,7 @@ if "chat" not in st.session_state:
 if "docs" not in st.session_state:
     st.session_state.docs = {}
 
-# ================= SAFE PDF =================
+# ================= PDF =================
 def extract_pdf(file):
     try:
         reader = PdfReader(file)
@@ -84,11 +83,10 @@ def extract_pdf(file):
     except:
         return ""
 
-# ================= CHUNK =================
 def chunk(text):
     return text.split(". ")
 
-# ================= EMBED SEARCH =================
+# ================= EMBEDDING SEARCH =================
 def retrieve(query, chunks):
     if not chunks:
         return []
@@ -101,21 +99,20 @@ def retrieve(query, chunks):
 
     return [chunks[i] for i in top]
 
-# ================= STREAM TEXT =================
-def stream(text):
-    box = st.empty()
-    out = ""
-    for c in text:
-        out += c
-        box.markdown(out)
-        time.sleep(0.01)
-
-# ================= VOICE OUTPUT =================
+# ================= TEXT TO SPEECH =================
 def speak(text):
     tts = gTTS(text[:300])
     path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
     tts.save(path)
     st.audio(path)
+
+# ================= COLOR FORMAT =================
+def format_ai(text):
+    text = text.replace("🧾", "<span style='color:#00d4ff'>🧾</span>")
+    text = text.replace("⚖️", "<span style='color:#a855f7'>⚖️</span>")
+    text = text.replace("🚨", "<span style='color:#ff3d81'>🚨</span>")
+    text = text.replace("📌", "<span style='color:#22c55e'>📌</span>")
+    return text
 
 # ================= SIDEBAR =================
 st.sidebar.title("📚 Document Vault")
@@ -136,12 +133,9 @@ for role, msg in st.session_state.chat:
     if role == "user":
         st.markdown(f"<div class='chat-user'>🧑 {msg}</div>", unsafe_allow_html=True)
     else:
-        st.markdown(f"<div class='chat-ai'>⚖️ {msg}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='chat-ai'>{format_ai(msg)}</div>", unsafe_allow_html=True)
 
-# ================= INPUT =================
-query = st.text_input("Ask legal question...")
-
-# ================= AI ENGINE (SAFE) =================
+# ================= AI ENGINE =================
 def ask_ai(query):
     all_chunks = []
     for d in st.session_state.docs.values():
@@ -150,13 +144,19 @@ def ask_ai(query):
     context = retrieve(query, all_chunks)
 
     prompt = f"""
-You are a senior legal AI assistant.
+You are a legal AI assistant.
 
-Give:
-1. Answer
-2. Legal reasoning
-3. Risk level
-4. Key clauses
+Return STRICTLY in this format:
+
+🧾 Answer: max 5-10 lines
+⚖️ Legal Reasoning: max 5 lines
+🚨 Risk Level: Low / Medium / High + 1 line reason
+📌 Key Clauses: max 4 bullet points
+
+RULES:
+- Be extremely concise
+- No long paragraphs
+- Max 150 words total
 
 Context:
 {context}
@@ -167,10 +167,12 @@ Question:
 
     try:
         return model.generate_content(prompt).text
-    except Exception as e:
-        return "⚠️ Gemini error: reduce input or try again."
+    except:
+        return "⚠️ Error"
 
-# ================= SEND =================
+# ================= INPUT =================
+query = st.text_input("Ask legal question...")
+
 if st.button("⚡ Send") and query:
     st.session_state.chat.append(("user", query))
 
@@ -178,19 +180,19 @@ if st.button("⚡ Send") and query:
 
     st.session_state.chat.append(("ai", response))
 
-    stream(response)
+    st.markdown(f"<div class='chat-ai'>{format_ai(response)}</div>", unsafe_allow_html=True)
+
     speak(response)
 
 # ================= SUMMARY =================
 if st.button("📌 Summary"):
     all_text = "\n".join([" ".join(v) for v in st.session_state.docs.values()])[:3000]
-    prompt = "Summarize legal document:\n" + all_text
+    prompt = "Summarize legal document in 5 bullet points:\n" + all_text
 
     try:
-        res = model.generate_content(prompt).text
-        st.write(res)
+        st.write(model.generate_content(prompt).text)
     except:
-        st.warning("Gemini limit reached")
+        st.warning("Limit reached")
 
 # ================= COMPARE =================
 file1 = st.file_uploader("OLD PDF", type=["pdf"])
@@ -202,7 +204,7 @@ if file1 and file2:
 
     if st.button("Compare"):
         prompt = f"""
-Compare:
+Compare OLD vs NEW contract:
 
 OLD:
 {t1[:2000]}
@@ -210,12 +212,12 @@ OLD:
 NEW:
 {t2[:2000]}
 
-Show differences clearly.
+Give only key differences in bullet points.
 """
         try:
             st.write(model.generate_content(prompt).text)
         except:
-            st.warning("Too many tokens - reduce file size")
+            st.warning("Too large")
 
 # ================= PDF REPORT =================
 def make_pdf(text):
@@ -232,5 +234,4 @@ def make_pdf(text):
 if st.button("⬇ Download Report") and st.session_state.chat:
     text = "\n".join([m[1] for m in st.session_state.chat if m[0] == "ai"])
     pdf = make_pdf(text)
-
     st.download_button("Download PDF", pdf, "legal_report.pdf", "application/pdf")
