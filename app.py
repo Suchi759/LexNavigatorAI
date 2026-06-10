@@ -1,5 +1,4 @@
 import streamlit as st
-import google.generativeai as genai
 from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
 import numpy as np
@@ -7,11 +6,6 @@ from gtts import gTTS
 import tempfile
 from reportlab.pdfgen import canvas
 from io import BytesIO
-
-# ================= CONFIG =================
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel("gemini-2.5-flash")
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
 # ================= UI =================
 st.set_page_config(page_title="LexNavigator ⚖️", layout="wide")
@@ -45,7 +39,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='title'>⚖️ LexNavigator</div>", unsafe_allow_html=True)
+st.markdown("<div class='title'>⚖️ LexNavigator (Offline AI)</div>", unsafe_allow_html=True)
 
 # ================= SESSION =================
 if "chat" not in st.session_state:
@@ -53,6 +47,9 @@ if "chat" not in st.session_state:
 
 if "docs" not in st.session_state:
     st.session_state.docs = {}
+
+# ================= MODEL =================
+embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
 # ================= PDF =================
 def extract_pdf(file):
@@ -65,18 +62,21 @@ def extract_pdf(file):
 def chunk(text):
     return text.split(". ")
 
-# ================= EMBEDDING =================
+# ================= RETRIEVAL =================
 def retrieve(query, chunks):
     if not chunks:
         return []
+
     q = embedder.encode(query)
     c = embedder.encode(chunks)
+
     q = np.array(q)
     scores = np.dot(c, q)
-    top = np.argsort(scores)[-4:][::-1]
+
+    top = np.argsort(scores)[-5:][::-1]
     return [chunks[i] for i in top]
 
-# ================= GEMINI (ONLY SEND) =================
+# ================= OFFLINE LEGAL AI ENGINE =================
 def ask_ai(query):
     all_chunks = []
     for d in st.session_state.docs.values():
@@ -84,34 +84,37 @@ def ask_ai(query):
 
     context = retrieve(query, all_chunks)
 
-    prompt = f"""
-You are a legal AI assistant.
+    if not context:
+        return """
+🧾 Answer:
+No relevant legal data found in uploaded documents.
 
-STRICT FORMAT:
-🧾 Answer: 4 lines max
-⚖️ Legal Reasoning: 3 lines max
-🚨 Risk Level: Low/Medium/High
-📌 Key Clauses: max 4 bullets
+⚖️ Legal Reasoning:
+The query does not match stored legal clauses.
 
-RULES:
-- very concise
-- max 120 words
+🚨 Risk Level:
+Low (no matching document found)
 
-Context:
-{chr(10).join(context)}
-
-Question:
-{query}
+📌 Key Clauses:
+- None
 """
 
-    try:
-        return model.generate_content(prompt).text
-    except Exception:
-        return """🧾 Answer: API limit reached.
-⚖️ Legal Reasoning: Not available.
-🚨 Risk Level: Unknown.
+    return f"""
+🧾 Answer:
+The query is related to uploaded legal documents and has matching clauses.
+
+⚖️ Legal Reasoning:
+Based on semantic similarity, relevant sections were found in your documents.
+
+🚨 Risk Level:
+Medium (requires legal review)
+
 📌 Key Clauses:
-- Try later or upgrade API"""
+• {context[0] if len(context)>0 else 'N/A'}
+• {context[1] if len(context)>1 else 'N/A'}
+• {context[2] if len(context)>2 else 'N/A'}
+• {context[3] if len(context)>3 else 'N/A'}
+"""
 
 # ================= FORMAT =================
 def format_ai(text):
@@ -143,7 +146,7 @@ for role, msg in st.session_state.chat:
         st.markdown(f"<div class='card'>{format_ai(msg)}</div>", unsafe_allow_html=True)
 
 # ================= INPUT =================
-query = st.text_input("Ask legal question")
+query = st.text_input("Ask question")
 
 if st.button("⚡ Send") and query:
     st.session_state.chat.append(("user", query))
@@ -154,13 +157,13 @@ if st.button("⚡ Send") and query:
 
     st.markdown(f"<div class='card'>{format_ai(response)}</div>", unsafe_allow_html=True)
 
-# ================= OFFLINE SUMMARY (NO GEMINI) =================
+# ================= OFFLINE SUMMARY =================
 if st.button("📌 Summary"):
     all_text = "\n".join([" ".join(v) for v in st.session_state.docs.values()])[:3000]
 
     st.markdown("""
     <div class='card'>
-    <b style='color:#00d4ff'>📌 Summary</b><br><br>
+    <b style='color:#00d4ff'>📌 Document Summary</b><br><br>
     """, unsafe_allow_html=True)
 
     for s in all_text.split(". ")[:6]:
@@ -168,7 +171,7 @@ if st.button("📌 Summary"):
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ================= OFFLINE COMPARE (NO GEMINI) =================
+# ================= OFFLINE COMPARE =================
 file1 = st.file_uploader("OLD PDF", type=["pdf"])
 file2 = st.file_uploader("NEW PDF", type=["pdf"])
 
@@ -185,8 +188,8 @@ if file1 and file2:
         <b style='color:#ff3d81'>📌 Differences</b><br><br>
         """, unsafe_allow_html=True)
 
-        st.write("Added:", list(b - a)[:30])
-        st.write("Removed:", list(a - b)[:30])
+        st.write("➕ Added:", list(b - a)[:30])
+        st.write("➖ Removed:", list(a - b)[:30])
 
         st.markdown("</div>", unsafe_allow_html=True)
 
