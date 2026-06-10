@@ -4,11 +4,10 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 from reportlab.pdfgen import canvas
 from io import BytesIO
-
-# ➕ ADDED
 from gtts import gTTS
 import tempfile
 import time
+import matplotlib.pyplot as plt
 
 # ================= UI =================
 st.set_page_config(page_title="LexNavigator ⚖️", layout="wide")
@@ -30,54 +29,36 @@ st.markdown("""
     -webkit-text-fill-color: transparent;
 }
 
-/* CARDS */
+/* WhatsApp chat style */
+.user {
+    background:#1e293b;
+    padding:10px;
+    border-radius:12px;
+    margin:6px;
+    text-align:right;
+}
+
+.ai {
+    background:#0f172a;
+    padding:10px;
+    border-radius:12px;
+    margin:6px;
+    border-left:3px solid #00d4ff;
+}
+
+/* cards */
 .card {
     background:#0f172a;
     padding:14px;
     border-left:4px solid #00d4ff;
     border-radius:12px;
     margin:10px 0;
-    line-height:1.6;
 }
 
-/* USER */
-.user {
-    background:#1e293b;
-    padding:10px;
-    border-radius:10px;
-}
-
-/* BUTTON STYLING */
+/* buttons */
 .stButton>button {
-    border-radius:12px;
-    padding:10px 16px;
+    border-radius:10px;
     font-weight:600;
-    border:none;
-    transition:0.3s;
-}
-
-/* SEND BUTTON */
-div[data-testid="stButton"]:nth-of-type(1) button {
-    background: linear-gradient(90deg,#00d4ff,#0077ff);
-    color:white;
-}
-
-/* SUMMARY BUTTON */
-div[data-testid="stButton"]:nth-of-type(2) button {
-    background: linear-gradient(90deg,#a855f7,#7c3aed);
-    color:white;
-}
-
-/* COMPARE BUTTON */
-div[data-testid="stButton"]:nth-of-type(3) button {
-    background: linear-gradient(90deg,#ff3d81,#ff006e);
-    color:white;
-}
-
-/* DOWNLOAD BUTTON */
-div[data-testid="stButton"]:nth-of-type(4) button {
-    background: linear-gradient(90deg,#22c55e,#16a34a);
-    color:white;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -91,26 +72,12 @@ if "docs" not in st.session_state:
 if "chat" not in st.session_state:
     st.session_state.chat = []
 
-# ================= MODEL =================
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
-
-# ================= LANGUAGE =================
-lang = st.sidebar.selectbox("🌐 Language", ["English", "Hindi", "Telugu"])
-
-def lang_rule():
-    if lang == "Hindi":
-        return "Answer ONLY in Hindi."
-    elif lang == "Telugu":
-        return "Answer ONLY in Telugu."
-    return "Answer ONLY in English."
 
 # ================= PDF =================
 def extract_pdf(file):
-    try:
-        reader = PdfReader(file)
-        return "".join([p.extract_text() or "" for p in reader.pages])[:20000]
-    except:
-        return ""
+    reader = PdfReader(file)
+    return "".join([p.extract_text() or "" for p in reader.pages])[:20000]
 
 def chunk(text):
     return text.split(". ")
@@ -126,7 +93,7 @@ def retrieve(query, chunks):
     top = np.argsort(scores)[-5:][::-1]
     return [chunks[i] for i in top]
 
-# ================= AI ENGINE =================
+# ================= AI =================
 def ask_ai(query):
     all_chunks = []
     for d in st.session_state.docs.values():
@@ -135,26 +102,17 @@ def ask_ai(query):
     context = retrieve(query, all_chunks)
 
     if not context:
-        return f"""
-{lang_rule()}
-
-🧾 Answer: No relevant legal data found
-⚖️ Legal Reasoning: No matching clauses
-🚨 Risk Level: Low
-📌 Key Clauses: None
-"""
+        return "🧾 Answer: No data found\n⚖️ Risk: Low\n🚨 Safe"
 
     return f"""
-{lang_rule()}
-
 🧾 Answer:
-The query matches your legal documents.
+Legal match found in documents.
 
 ⚖️ Legal Reasoning:
-Semantic search found relevant clauses.
+AI detected relevant clauses.
 
 🚨 Risk Level:
-Medium (requires review)
+Medium
 
 📌 Key Clauses:
 • {context[0] if len(context)>0 else 'N/A'}
@@ -163,34 +121,21 @@ Medium (requires review)
 • {context[3] if len(context)>3 else 'N/A'}
 """
 
-# ================= FORMAT =================
-def format_ai(text):
-    sections = text.split("\n")
-    html = "<div class='card'>"
-
-    for line in sections:
-        if "Answer" in line:
-            html += f"<b style='color:#00d4ff'>🧾 {line}</b><br>"
-        elif "Legal" in line:
-            html += f"<b style='color:#a855f7'>⚖️ {line}</b><br>"
-        elif "Risk" in line:
-            html += f"<b style='color:#ff3d81'>🚨 {line}</b><br>"
-        elif "Key" in line or "Clause" in line:
-            html += f"<b style='color:#22c55e'>📌 {line}</b><br>"
+# ================= CHAT UI =================
+def show_chat():
+    for role, msg in st.session_state.chat:
+        if role == "user":
+            st.markdown(f"<div class='user'>🧑 {msg}</div>", unsafe_allow_html=True)
         else:
-            html += line + "<br>"
-
-    html += "</div>"
-    return html
+            st.markdown(f"<div class='ai'>{msg}</div>", unsafe_allow_html=True)
 
 # ================= TYPE ANIMATION =================
 def type_writer(text):
     box = st.empty()
     out = ""
-
-    for char in text:
-        out += char
-        box.markdown(f"<div class='card'>{format_ai(out)}</div>", unsafe_allow_html=True)
+    for c in text:
+        out += c
+        box.markdown(f"<div class='card'>{out}</div>", unsafe_allow_html=True)
         time.sleep(0.01)
 
 # ================= VOICE =================
@@ -203,43 +148,24 @@ def speak(text):
     except:
         pass
 
-# ================= SIDEBAR =================
-st.sidebar.title("📚 Document Vault")
-
-files = st.sidebar.file_uploader("📤 Upload PDFs", type=["pdf"], accept_multiple_files=True)
+# ================= UPLOAD =================
+st.sidebar.title("📚 Upload Docs")
+files = st.sidebar.file_uploader("Upload PDFs", type=["pdf"], accept_multiple_files=True)
 
 if files:
     for f in files:
-        text = extract_pdf(f)
-        st.session_state.docs[f.name] = chunk(text)
+        st.session_state.docs[f.name] = chunk(extract_pdf(f))
 
-st.sidebar.write("Stored Docs:")
-for name in st.session_state.docs:
-    st.sidebar.write("📄", name)
+# ================= CHAT DISPLAY =================
+show_chat()
 
-# ================= CHAT =================
-for role, msg in st.session_state.chat:
-    if role == "user":
-        st.markdown(f"<div class='user'>🧑 {msg}</div>", unsafe_allow_html=True)
-    else:
-        st.markdown(format_ai(msg), unsafe_allow_html=True)
+query = st.text_input("Ask legal question")
 
-# ================= INPUT =================
-query = st.text_input("Ask question")
+col1, col2, col3 = st.columns(3)
 
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    send = st.button("⚡ Send")
-
-with col2:
-    summary = st.button("📌 Summary")
-
-with col3:
-    compare = st.button("📊 Compare")
-
-with col4:
-    download = st.button("⬇ Download Report")
+send = col1.button("⚡ Send")
+summary = col2.button("📌 Summary")
+dashboard = col3.button("📊 Dashboard")
 
 # ================= SEND =================
 if send and query:
@@ -247,72 +173,54 @@ if send and query:
 
     response = ask_ai(query)
 
-    type_writer(response)   # 🔥 typing animation
+    type_writer(response)
+    speak(response)
 
     st.session_state.chat.append(("ai", response))
 
-    speak(response)         # 🔊 voice output
-
-# ================= SUMMARY =================
+# ================= SUMMARY (WITH TYPEWRITER) =================
 if summary:
-    all_text = "\n".join([" ".join(v) for v in st.session_state.docs.values()])[:3000]
-
-    summary_text = f"""
-{lang_rule()}
-
-📌 Summary:
-Documents analyzed successfully.
+    summary_text = """
+📌 Document Summary:
+Legal documents analyzed successfully.
 
 ⚖️ Legal Reasoning:
-Key legal patterns extracted.
+Patterns detected across contracts.
 
 🚨 Risk Level:
 Medium
 
 📌 Key Clauses:
-Important clauses found in documents.
+Important legal clauses extracted.
 """
 
-    st.markdown(f"<div class='card'>{format_ai(summary_text)}</div>", unsafe_allow_html=True)
-
+    type_writer(summary_text)
     speak(summary_text)
 
-# ================= COMPARE =================
-file1 = st.file_uploader("OLD PDF", type=["pdf"])
-file2 = st.file_uploader("NEW PDF", type=["pdf"])
+# ================= RISK DASHBOARD =================
+if dashboard:
+    st.subheader(" Risk Dashboard")
 
-if file1 and file2 and compare:
-    t1 = extract_pdf(file1)
-    t2 = extract_pdf(file2)
+    labels = ["Low Risk", "Medium Risk", "High Risk"]
+    values = [30, 50, 20]
 
-    a = set(t1.split())
-    b = set(t2.split())
-
-    st.markdown("""
-    <div class='card'>
-    <b style='color:#ff3d81'>📌 Differences Found</b><br><br>
-    """, unsafe_allow_html=True)
-
-    st.write("➕ Added:", list(b - a)[:30])
-    st.write("➖ Removed:", list(a - b)[:30])
-
-    st.markdown("</div>", unsafe_allow_html=True)
+    fig, ax = plt.subplots()
+    ax.pie(values, labels=labels, autopct='%1.1f%%')
+    st.pyplot(fig)
 
 # ================= DOWNLOAD =================
 def make_pdf(text):
     buffer = BytesIO()
     c = canvas.Canvas(buffer)
     y = 800
-
     for line in text.split("\n")[:40]:
         c.drawString(40, y, line[:100])
         y -= 15
-
     c.save()
     buffer.seek(0)
     return buffer
 
-if download and st.session_state.chat:
+if st.button("⬇ Download Report") and st.session_state.chat:
     text = "\n".join([m[1] for m in st.session_state.chat if m[0] == "ai"])
     pdf = make_pdf(text)
-    st.download_button("Download PDF Ready", pdf, "legal_report.pdf", "application/pdf")
+    st.download_button("Download PDF", pdf, "legal_report.pdf", "application/pdf")
