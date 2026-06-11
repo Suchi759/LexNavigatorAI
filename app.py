@@ -198,16 +198,31 @@ Important legal clauses extracted.
     speak(summary_text)
 
 # ================= RISK DASHBOARD =================
+# ================= RISK DASHBOARD =================
 if dashboard:
-    st.subheader(" Risk Dashboard")
 
-    labels = ["Low Risk", "Medium Risk", "High Risk"]
-    values = [30, 50, 20]
+    st.markdown("""
+    <div class='card'>
+    <h2 style='color:#00d4ff'>⚖️ Legal Risk Dashboard</h2>
+    <p style='color:white'>AI Risk Analysis Overview</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    fig, ax = plt.subplots()
-    ax.pie(values, labels=labels, autopct='%1.1f%%')
-    st.pyplot(fig)
+    chart_data = {
+        "Low Risk": [30],
+        "Medium Risk": [50],
+        "High Risk": [20]
+    }
 
+    st.bar_chart(chart_data)
+
+    st.markdown("""
+    <div class='card'>
+        <h3 style='color:#22c55e'>🟢 Low Risk : 30%</h3>
+        <h3 style='color:#facc15'>🟡 Medium Risk : 50%</h3>
+        <h3 style='color:#ef4444'>🔴 High Risk : 20%</h3>
+    </div>
+    """, unsafe_allow_html=True)
 # ================= DOWNLOAD =================
 def make_pdf(text):
     buffer = BytesIO()
