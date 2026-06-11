@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 
 # ================= UI =================
-st.set_page_config(page_title="LexNavigator ⚖️ ", layout="wide")
+st.set_page_config(page_title="LexNavigator ⚖️", layout="wide")
 
 st.markdown("""
 <style>
@@ -67,7 +67,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='title'>⚖️ LexNavigator </div>", unsafe_allow_html=True)
+st.markdown("<div class='title'>⚖️ LexNavigator</div>", unsafe_allow_html=True)
 
 # ================= SESSION =================
 if "users" not in st.session_state:
@@ -198,78 +198,67 @@ if st.sidebar.button("⬇ Export Chat"):
         "chat.txt"
     )
 
-# ================= CHAT =================
-st.subheader("💬 Chat Interface")
+# ================= MAIN LAYOUT =================
+chat_col, compare_col = st.columns([2,2])
 
-for role, msg in user_data["chat"]:
-    if role == "user":
-        st.markdown(f"<div class='user'>🧑 {msg}<br><small>{datetime.now()}</small></div>", unsafe_allow_html=True)
-    else:
-        st.markdown(f"<div class='ai'>🤖 {msg}<br><small>{datetime.now()}</small></div>", unsafe_allow_html=True)
+# ---- CHAT INTERFACE ----
+with chat_col:
+    st.subheader("💬 Chat Interface")
 
-# ================= INPUT =================
-query = st.text_input("Ask Legal Question")
+    for role, msg in user_data["chat"]:
+        if role == "user":
+            st.markdown(f"<div class='user'>🧑 {msg}<br><small>{datetime.now()}</small></div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='ai'>🤖 {msg}<br><small>{datetime.now()}</small></div>", unsafe_allow_html=True)
 
-col1, col2 = st.columns(2)
+    query = st.text_input("Ask Legal Question")
+    c1, c2 = st.columns(2)
+    send = c1.button("⚡ Send")
+    summary = c2.button("📌 Summary")
 
-send = col1.button("⚡ Send")
-summary = col2.button("📌 Summary")
+    if send and query:
+        user_data["chat"].append(("user", query))
+        thinking()
+        response = ask_ai(query)
+        type_writer(response)
+        speak(response)
+        user_data["chat"].append(("ai", response))
 
-# ================= SEND =================
-if send and query:
-    user_data["chat"].append(("user", query))
-    thinking()
-    response = ask_ai(query)
-    type_writer(response)
-    speak(response)
-    user_data["chat"].append(("ai", response))
+    if summary:
+        thinking()
+        text = "📌 Document summary generated...\n⚖️ Risk: Medium\n📄 Legal clauses extracted"
+        type_writer(text)
 
-# ================= SUMMARY =================
-if summary:
-    thinking()
-    text = "📌 Document summary generated...\n⚖️ Risk: Medium\n📄 Legal clauses extracted"
-    type_writer(text)
+    st.subheader("📊 Risk Dashboard")
+    if user_data["history_risk"]:
+        fig, ax = plt.subplots()
+        ax.plot(user_data["history_risk"], marker="o")
+        ax.set_title(f"Risk Trend for {username}")
+        st.pyplot(fig)
 
-# ================= DASHBOARD =================
-st.subheader("📊 Risk Dashboard")
+# ---- DOCUMENT COMPARISON ----
+with compare_col:
+    st.subheader("⚖️ Document Comparison")
 
-if user_data["history_risk"]:
-    fig, ax = plt.subplots()
-    ax.plot(user_data["history_risk"], marker="o")
-    ax.set_title(f"Risk Trend for {username}")
-    st.pyplot(fig)
+    f1 = st.file_uploader("OLD PDF", type=["pdf"], key="old_pdf")
+    f2 = st.file_uploader("NEW PDF", type=["pdf"], key="new_pdf")
 
-# ================= DOCUMENT COMPARISON (Separate Sidebar) =================
-# ================= DOCUMENT COMPARISON (Separate Sidebar) =================
-st.sidebar.subheader("⚖️  Document Comparison")
+    if f1 and f2:
+        t1 = extract_pdf(f1)
+        t2 = extract_pdf(f2)
 
-f1 = st.sidebar.file_uploader("OLD PDF", type=["pdf"])
-f2 = st.sidebar.file_uploader("NEW PDF", type=["pdf"])
+        added = list(set(t2.split()) - set(t1.split()))[:20]
+        removed = list(set(t1.split()) - set(t2.split()))[:20]
 
-if f1 and f2:
-    t1 = extract_pdf(f1)
-    t2 = extract_pdf(f2)
+        st.markdown("### 📌 Clause Changes")
+        st.write("➕ Added Clauses:", added)
+        st.write("➖ Removed Clauses:", removed)
 
-    # Compare word sets
-    added = list(set(t2.split()) - set(t1.split()))[:20]
-    removed = list(set(t1.split()) - set(t2.split()))[:20]
+        st.markdown("### ⚖️ Risk Impact")
+        st.success("Risk Increased / Decreased (AI Estimated)")
+        st.info("New clauses detected may affect agreement validity")
 
-    st.sidebar.markdown("### 📌 Clause Changes")
-    st.sidebar.write("➕ Added Clauses:", added)
-    st.sidebar.write("➖ Removed Clauses:", removed)
-
-    st.sidebar.markdown("### ⚖️ Risk Impact")
-    st.sidebar.success("Risk Increased / Decreased (AI Estimated)")
-    st.sidebar.info("New clauses detected may affect agreement validity")
-
-    # Download comparison report
-    report_text = "Added: " + " ".join(added) + "\nRemoved: " + " ".join(removed)
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer)
-    y = 800
-    for line in report_text.split("\n"):
-        c.drawString(40, y, line[:100])
-        y -= 15
-    c.save()
-    buffer.seek(0)
-    st.sidebar.download_button("⬇ Download Comparison Report", buffer, "comparison_report.pdf", "application/pdf")
+        report_text = "Added: " + " ".join(added) + "\nRemoved: " + " ".join(removed)
+        buffer = BytesIO()
+        c = canvas.Canvas(buffer)
+        y =
