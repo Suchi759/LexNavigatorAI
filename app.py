@@ -253,4 +253,5 @@ if f1 and f2:
     st.sidebar.success("Risk Increased / Decreased (AI Estimated)")
     st.sidebar.info("New clauses detected may affect agreement validity")
 
-    report_text = "Added: " + " ".join(added) + "\nRemoved: " + "
+    # Download comparison report
+    report_text = "Added: " + " ".join(added) + "\nRemoved:
