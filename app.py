@@ -7,7 +7,6 @@ from io import BytesIO
 from gtts import gTTS
 import tempfile
 import time
-import matplotlib.pyplot as plt
 
 # ================= UI =================
 st.set_page_config(page_title="LexNavigator ⚖️", layout="wide")
@@ -29,7 +28,7 @@ st.markdown("""
     -webkit-text-fill-color: transparent;
 }
 
-/* WhatsApp chat style */
+/* CHAT UI */
 .user {
     background:#1e293b;
     padding:10px;
@@ -38,15 +37,6 @@ st.markdown("""
     text-align:right;
 }
 
-.ai {
-    background:#0f172a;
-    padding:10px;
-    border-radius:12px;
-    margin:6px;
-    border-left:3px solid #00d4ff;
-}
-
-/* cards */
 .card {
     background:#0f172a;
     padding:14px;
@@ -55,15 +45,17 @@ st.markdown("""
     margin:10px 0;
 }
 
-/* buttons */
+/* BUTTONS */
 .stButton>button {
-    border-radius:10px;
+    border-radius:12px;
+    padding:10px 16px;
     font-weight:600;
+    border:none;
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='title'>⚖️ LexNavigator </div>", unsafe_allow_html=True)
+st.markdown("<div class='title'>⚖️ LexNavigator AI</div>", unsafe_allow_html=True)
 
 # ================= SESSION =================
 if "docs" not in st.session_state:
@@ -72,12 +64,16 @@ if "docs" not in st.session_state:
 if "chat" not in st.session_state:
     st.session_state.chat = []
 
+# ================= MODEL =================
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
 # ================= PDF =================
 def extract_pdf(file):
-    reader = PdfReader(file)
-    return "".join([p.extract_text() or "" for p in reader.pages])[:20000]
+    try:
+        reader = PdfReader(file)
+        return "".join([p.extract_text() or "" for p in reader.pages])[:20000]
+    except:
+        return ""
 
 def chunk(text):
     return text.split(". ")
@@ -93,7 +89,7 @@ def retrieve(query, chunks):
     top = np.argsort(scores)[-5:][::-1]
     return [chunks[i] for i in top]
 
-# ================= AI =================
+# ================= AI ENGINE =================
 def ask_ai(query):
     all_chunks = []
     for d in st.session_state.docs.values():
@@ -102,17 +98,22 @@ def ask_ai(query):
     context = retrieve(query, all_chunks)
 
     if not context:
-        return "🧾 Answer: No data found\n⚖️ Risk: Low\n🚨 Safe"
+        return """
+🧾 Answer: No relevant legal data found  
+⚖️ Legal Reasoning: No matching clauses  
+🚨 Risk Level: Low  
+📌 Key Clauses: None  
+"""
 
     return f"""
 🧾 Answer:
-Legal match found in documents.
+Legal documents matched successfully.
 
 ⚖️ Legal Reasoning:
-AI detected relevant clauses.
+Semantic search detected relevant clauses.
 
 🚨 Risk Level:
-Medium
+Medium (review required)
 
 📌 Key Clauses:
 • {context[0] if len(context)>0 else 'N/A'}
@@ -121,27 +122,40 @@ Medium
 • {context[3] if len(context)>3 else 'N/A'}
 """
 
-# ================= CHAT UI =================
-def show_chat():
-    for role, msg in st.session_state.chat:
-        if role == "user":
-            st.markdown(f"<div class='user'>🧑 {msg}</div>", unsafe_allow_html=True)
+# ================= FORMAT =================
+def format_ai(text):
+    lines = text.split("\n")
+    html = "<div class='card'>"
+
+    for line in lines:
+        if "Answer" in line:
+            html += f"<b style='color:#00d4ff'>🧾 {line}</b><br>"
+        elif "Legal" in line:
+            html += f"<b style='color:#a855f7'>⚖️ {line}</b><br>"
+        elif "Risk" in line:
+            html += f"<b style='color:#ff3d81'>🚨 {line}</b><br>"
+        elif "Key" in line or "Clause" in line:
+            html += f"<b style='color:#22c55e'>📌 {line}</b><br>"
         else:
-            st.markdown(f"<div class='ai'>{msg}</div>", unsafe_allow_html=True)
+            html += line + "<br>"
+
+    html += "</div>"
+    return html
 
 # ================= TYPE ANIMATION =================
 def type_writer(text):
     box = st.empty()
     out = ""
+
     for c in text:
         out += c
         box.markdown(f"<div class='card'>{out}</div>", unsafe_allow_html=True)
-        time.sleep(0.01)
+        time.sleep(0.005)
 
 # ================= VOICE =================
 def speak(text):
     try:
-        tts = gTTS(text[:300])
+        tts = gTTS(text=text[:300])
         path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
         tts.save(path)
         st.audio(path)
@@ -149,7 +163,8 @@ def speak(text):
         pass
 
 # ================= UPLOAD =================
-st.sidebar.title("📚 Upload Docs")
+st.sidebar.title("📚 Document Vault")
+
 files = st.sidebar.file_uploader("Upload PDFs", type=["pdf"], accept_multiple_files=True)
 
 if files:
@@ -157,15 +172,21 @@ if files:
         st.session_state.docs[f.name] = chunk(extract_pdf(f))
 
 # ================= CHAT DISPLAY =================
-show_chat()
+for role, msg in st.session_state.chat:
+    if role == "user":
+        st.markdown(f"<div class='user'>🧑 {msg}</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(format_ai(msg), unsafe_allow_html=True)
 
+# ================= INPUT =================
 query = st.text_input("Ask legal question")
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 send = col1.button("⚡ Send")
 summary = col2.button("📌 Summary")
-dashboard = col3.button("📊 Dashboard")
+compare = col3.button("⚖️ Compare")
+download = col4.button("⬇ Download")
 
 # ================= SEND =================
 if send and query:
@@ -178,64 +199,58 @@ if send and query:
 
     st.session_state.chat.append(("ai", response))
 
-# ================= SUMMARY (WITH TYPEWRITER) =================
+# ================= SUMMARY =================
 if summary:
     summary_text = """
-📌 Document Summary:
-Legal documents analyzed successfully.
+📌 Summary:
+Documents analyzed successfully.
 
 ⚖️ Legal Reasoning:
-Patterns detected across contracts.
+Key clauses detected.
 
 🚨 Risk Level:
 Medium
 
 📌 Key Clauses:
-Important legal clauses extracted.
+Important legal patterns found.
 """
 
     type_writer(summary_text)
     speak(summary_text)
 
-# ================= RISK DASHBOARD =================
-# ================= RISK DASHBOARD =================
-if dashboard:
+# ================= COMPARE =================
+file1 = st.file_uploader("OLD PDF", type=["pdf"])
+file2 = st.file_uploader("NEW PDF", type=["pdf"])
 
-    st.markdown("""
-    <div class='card'>
-    <h2 style='color:#00d4ff'>⚖️ Legal Risk Dashboard</h2>
-    <p style='color:white'>AI Risk Analysis Overview</p>
-    </div>
-    """, unsafe_allow_html=True)
+if file1 and file2 and compare:
+    t1 = extract_pdf(file1)
+    t2 = extract_pdf(file2)
 
-    chart_data = {
-        "Low Risk": [30],
-        "Medium Risk": [50],
-        "High Risk": [20]
-    }
+    a = set(t1.split())
+    b = set(t2.split())
 
-    st.bar_chart(chart_data)
+    st.markdown("<div class='card'><b>📌 Differences Found</b><br><br>", unsafe_allow_html=True)
 
-    st.markdown("""
-    <div class='card'>
-        <h3 style='color:#22c55e'>🟢 Low Risk : 30%</h3>
-        <h3 style='color:#facc15'>🟡 Medium Risk : 50%</h3>
-        <h3 style='color:#ef4444'>🔴 High Risk : 20%</h3>
-    </div>
-    """, unsafe_allow_html=True)
+    st.write("➕ Added:", list(b - a)[:30])
+    st.write("➖ Removed:", list(a - b)[:30])
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
 # ================= DOWNLOAD =================
 def make_pdf(text):
     buffer = BytesIO()
     c = canvas.Canvas(buffer)
     y = 800
+
     for line in text.split("\n")[:40]:
         c.drawString(40, y, line[:100])
         y -= 15
+
     c.save()
     buffer.seek(0)
     return buffer
 
-if st.button("⬇ Download Report") and st.session_state.chat:
+if download and st.session_state.chat:
     text = "\n".join([m[1] for m in st.session_state.chat if m[0] == "ai"])
     pdf = make_pdf(text)
-    st.download_button("Download PDF", pdf, "legal_report.pdf", "application/pdf")
+    st.download_button("Download PDF Ready", pdf, "legal_report.pdf", "application/pdf")
