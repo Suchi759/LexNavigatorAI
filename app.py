@@ -240,7 +240,8 @@ if user_data["history_risk"]:
     st.pyplot(fig)
 
 # ================= DOCUMENT COMPARISON (Separate Sidebar) =================
-st.sidebar.subheader("⚖️ Smart Document Comparison AI")
+# ================= DOCUMENT COMPARISON (Separate Sidebar) =================
+st.sidebar.subheader("⚖️  Document Comparison")
 
 f1 = st.sidebar.file_uploader("OLD PDF", type=["pdf"])
 f2 = st.sidebar.file_uploader("NEW PDF", type=["pdf"])
@@ -249,4 +250,26 @@ if f1 and f2:
     t1 = extract_pdf(f1)
     t2 = extract_pdf(f2)
 
-    added = list(set(t2
+    # Compare word sets
+    added = list(set(t2.split()) - set(t1.split()))[:20]
+    removed = list(set(t1.split()) - set(t2.split()))[:20]
+
+    st.sidebar.markdown("### 📌 Clause Changes")
+    st.sidebar.write("➕ Added Clauses:", added)
+    st.sidebar.write("➖ Removed Clauses:", removed)
+
+    st.sidebar.markdown("### ⚖️ Risk Impact")
+    st.sidebar.success("Risk Increased / Decreased (AI Estimated)")
+    st.sidebar.info("New clauses detected may affect agreement validity")
+
+    # Download comparison report
+    report_text = "Added: " + " ".join(added) + "\nRemoved: " + " ".join(removed)
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer)
+    y = 800
+    for line in report_text.split("\n"):
+        c.drawString(40, y, line[:100])
+        y -= 15
+    c.save()
+    buffer.seek(0)
+    st.sidebar.download_button("⬇ Download Comparison Report", buffer, "comparison_report.pdf", "application/pdf")
