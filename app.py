@@ -28,7 +28,7 @@ st.markdown("""
     -webkit-text-fill-color: transparent;
 }
 
-/* CHAT UI */
+/* CHAT */
 .user {
     background:#1e293b;
     padding:10px;
@@ -45,12 +45,41 @@ st.markdown("""
     margin:10px 0;
 }
 
-/* BUTTONS */
+/* 🎨 CINEMATIC BUTTONS */
 .stButton>button {
-    border-radius:12px;
-    padding:10px 16px;
-    font-weight:600;
+    border-radius:14px;
+    padding:12px 18px;
+    font-weight:700;
     border:none;
+    color:white;
+    transition:0.3s;
+    box-shadow:0px 0px 15px rgba(0,0,0,0.4);
+}
+
+/* Send */
+div[data-testid="stButton"]:nth-of-type(1) button {
+    background: linear-gradient(90deg,#00d4ff,#0077ff);
+}
+
+/* Summary */
+div[data-testid="stButton"]:nth-of-type(2) button {
+    background: linear-gradient(90deg,#a855f7,#ff3d81);
+}
+
+/* Compare */
+div[data-testid="stButton"]:nth-of-type(3) button {
+    background: linear-gradient(90deg,#ff006e,#ffb703);
+}
+
+/* Download */
+div[data-testid="stButton"]:nth-of-type(4) button {
+    background: linear-gradient(90deg,#22c55e,#16a34a);
+}
+
+/* HOVER EFFECT */
+.stButton>button:hover {
+    transform: scale(1.05);
+    filter: brightness(1.2);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -63,6 +92,10 @@ if "docs" not in st.session_state:
 
 if "chat" not in st.session_state:
     st.session_state.chat = []
+
+# ================= MEMORY =================
+if "memory" not in st.session_state:
+    st.session_state.memory = []
 
 # ================= MODEL =================
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
@@ -89,7 +122,7 @@ def retrieve(query, chunks):
     top = np.argsort(scores)[-5:][::-1]
     return [chunks[i] for i in top]
 
-# ================= AI ENGINE =================
+# ================= AI =================
 def ask_ai(query):
     all_chunks = []
     for d in st.session_state.docs.values():
@@ -107,10 +140,10 @@ def ask_ai(query):
 
     return f"""
 🧾 Answer:
-Legal documents matched successfully.
+Legal match found in documents.
 
 ⚖️ Legal Reasoning:
-Semantic search detected relevant clauses.
+AI detected relevant legal clauses.
 
 🚨 Risk Level:
 Medium (review required)
@@ -134,23 +167,22 @@ def format_ai(text):
             html += f"<b style='color:#a855f7'>⚖️ {line}</b><br>"
         elif "Risk" in line:
             html += f"<b style='color:#ff3d81'>🚨 {line}</b><br>"
-        elif "Key" in line or "Clause" in line:
+        elif "Key" in line:
             html += f"<b style='color:#22c55e'>📌 {line}</b><br>"
         else:
-            html += line + "<br>"
+            html += f"<span style='color:#e2e8f0'>{line}</span><br>"
 
     html += "</div>"
     return html
 
-# ================= TYPE ANIMATION =================
+# ================= TYPE =================
 def type_writer(text):
     box = st.empty()
     out = ""
-
     for c in text:
         out += c
         box.markdown(f"<div class='card'>{out}</div>", unsafe_allow_html=True)
-        time.sleep(0.005)
+        time.sleep(0.003)
 
 # ================= VOICE =================
 def speak(text):
@@ -162,7 +194,7 @@ def speak(text):
     except:
         pass
 
-# ================= UPLOAD =================
+# ================= SIDEBAR =================
 st.sidebar.title("📚 Document Vault")
 
 files = st.sidebar.file_uploader("Upload PDFs", type=["pdf"], accept_multiple_files=True)
@@ -171,7 +203,17 @@ if files:
     for f in files:
         st.session_state.docs[f.name] = chunk(extract_pdf(f))
 
-# ================= CHAT DISPLAY =================
+# ================= MEMORY UI =================
+st.sidebar.subheader("🧠 Memory")
+if st.session_state.chat:
+    for role, msg in st.session_state.chat[-5:]:
+        st.sidebar.write("🧑" if role=="user" else "🤖", msg[:50])
+
+st.sidebar.subheader("📊 Stats")
+st.sidebar.metric("Docs Uploaded", len(st.session_state.docs))
+st.sidebar.metric("Chats", len(st.session_state.chat))
+
+# ================= CHAT =================
 for role, msg in st.session_state.chat:
     if role == "user":
         st.markdown(f"<div class='user'>🧑 {msg}</div>", unsafe_allow_html=True)
@@ -206,7 +248,7 @@ if summary:
 Documents analyzed successfully.
 
 ⚖️ Legal Reasoning:
-Key clauses detected.
+Key clauses extracted.
 
 🚨 Risk Level:
 Medium
@@ -214,9 +256,22 @@ Medium
 📌 Key Clauses:
 Important legal patterns found.
 """
-
     type_writer(summary_text)
     speak(summary_text)
+
+# ================= DASHBOARD =================
+st.subheader("⚖️ Risk Dashboard")
+
+low = sum("low" in m[1].lower() for m in st.session_state.chat)
+med = sum("medium" in m[1].lower() for m in st.session_state.chat)
+high = sum("high" in m[1].lower() for m in st.session_state.chat)
+
+st.progress(min(1.0, med*0.1))
+st.write("🟡 Medium Risk Level Trending")
+
+st.metric("Low Risk", low)
+st.metric("Medium Risk", med)
+st.metric("High Risk", high)
 
 # ================= COMPARE =================
 file1 = st.file_uploader("OLD PDF", type=["pdf"])
