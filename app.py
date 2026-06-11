@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 
 # ================= UI =================
-st.set_page_config(page_title="LexNavigator ⚖️ Pro", layout="wide")
+st.set_page_config(page_title="LexNavigator ⚖️ ", layout="wide")
 
 st.markdown("""
 <style>
@@ -56,7 +56,7 @@ st.markdown("""
     border-radius:12px;
     border-left:4px solid #00d4ff;
     margin:10px 0;
-    box-shadow:0px 0px 10px rgba(0,212,255,0.2);
+    box-shadow:0px 0px 10px rgba(0,212,255,0.4);
 }
 
 /* BUTTONS */
@@ -66,21 +66,27 @@ st.markdown("""
     font-weight:700;
     transition:0.3s;
     color:white;
+    box-shadow:0px 0px 12px rgba(0,212,255,0.6);
+}
+.stButton>button:hover {
+    transform: scale(1.05);
+    box-shadow:0px 0px 20px rgba(255,61,129,0.8);
+    background: linear-gradient(90deg,#00d4ff,#a855f7,#ff3d81);
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='title'>⚖️ LexNavigator AI Pro</div>", unsafe_allow_html=True)
+st.markdown("<div class='title'>⚖️ LexNavigator</div>", unsafe_allow_html=True)
 
 # ================= SESSION =================
-if "docs" not in st.session_state:
-    st.session_state.docs = {}
+if "users" not in st.session_state:
+    st.session_state.users = {}
 
-if "chat" not in st.session_state:
-    st.session_state.chat = []
+username = st.sidebar.text_input("👤 Enter your name", "Guest")
+if username not in st.session_state.users:
+    st.session_state.users[username] = {"docs": {}, "chat": [], "history_risk": []}
 
-if "history_risk" not in st.session_state:
-    st.session_state.history_risk = []
+user_data = st.session_state.users[username]
 
 # ================= MODEL =================
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
@@ -103,6 +109,16 @@ def retrieve(query, chunks):
     top = np.argsort(scores)[-5:][::-1]
     return [chunks[i] for i in top]
 
+# ================= REAL RISK ENGINE =================
+def risk_score(context):
+    keywords = ["liability", "penalty", "termination", "breach", "damages", "indemnity"]
+    score = 0
+    for clause in context:
+        for k in keywords:
+            if k.lower() in clause.lower():
+                score += 15
+    return min(100, max(20, score))
+
 # ================= THINKING MODE =================
 def thinking():
     with st.status("🧠 Thinking Mode Activated...", expanded=True) as status:
@@ -117,16 +133,16 @@ def thinking():
 # ================= AI =================
 def ask_ai(query):
     all_chunks = []
-    for d in st.session_state.docs.values():
+    for d in user_data["docs"].values():
         all_chunks.extend(d)
 
     context = retrieve(query, all_chunks)
 
-    risk = np.random.randint(20, 80)
-    st.session_state.history_risk.append(risk)
-
     if not context:
         return "🧾 No relevant legal data found\n⚖️ Risk: Low"
+
+    risk = risk_score(context)
+    user_data["history_risk"].append(risk)
 
     return f"""
 🧾 Answer:
@@ -170,27 +186,27 @@ files = st.sidebar.file_uploader("Upload PDFs", type=["pdf"], accept_multiple_fi
 
 if files:
     for f in files:
-        st.session_state.docs[f.name] = chunk(extract_pdf(f))
+        user_data["docs"][f.name] = chunk(extract_pdf(f))
 
 # ================= MEMORY VAULT =================
 st.sidebar.subheader("💾 Memory Vault")
 
 search = st.sidebar.text_input("Search Chat Memory")
 if search:
-    for r,m in st.session_state.chat:
+    for r,m in user_data["chat"]:
         if search.lower() in m.lower():
             st.sidebar.write("🔎", m[:80])
 
 if st.sidebar.button("🗑 Clear Memory"):
-    st.session_state.chat = []
+    user_data["chat"] = []
 
 if st.sidebar.button("⬇ Export Chat"):
-    st.sidebar.download_button("Download", "\n".join([m[1] for m in st.session_state.chat]), "chat.txt")
+    st.sidebar.download_button("Download", "\n".join([m[1] for m in user_data["chat"]), "chat.txt")
 
 # ================= CHAT =================
 st.subheader("💬 Chat Interface")
 
-for role, msg in st.session_state.chat:
+for role, msg in user_data["chat"]:
     if role == "user":
         st.markdown(f"<div class='user'>🧑 {msg}<br><small>{datetime.now()}</small></div>", unsafe_allow_html=True)
     else:
@@ -199,15 +215,14 @@ for role, msg in st.session_state.chat:
 # ================= INPUT =================
 query = st.text_input("Ask Legal Question")
 
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 send = col1.button("⚡ Send")
 summary = col2.button("📌 Summary")
-compare = col3.button("⚖️ Compare")
 
 # ================= SEND =================
 if send and query:
-    st.session_state.chat.append(("user", query))
+    user_data["chat"].append(("user", query))
 
     thinking()
 
@@ -216,8 +231,7 @@ if send and query:
     type_writer(response)
     speak(response)
 
-    st.session_state.chat.append(("ai", response))
-    st.session_state.history_risk.append(np.random.randint(20,80))
+    user_data["chat"].append(("ai", response))
 
 # ================= SUMMARY =================
 if summary:
@@ -228,48 +242,29 @@ if summary:
 # ================= DASHBOARD =================
 st.subheader("📊 Risk Dashboard")
 
-if st.session_state.history_risk:
+if user_data["history_risk"]:
     fig, ax = plt.subplots()
-    ax.plot(st.session_state.history_risk, marker="o")
+    ax.plot(user_data["history_risk"], marker="o")
+    ax.set_title(f"Risk Trend for {username}")
     st.pyplot(fig)
 
-# ================= DOCUMENT COMPARISON AI =================
-if compare:
-    st.subheader("⚖️ Smart Document Comparison AI")
+# ================= DOCUMENT COMPARISON (Separate Sidebar) =================
+st.sidebar.subheader("⚖️ Smart Document Comparison AI")
 
-    f1 = st.file_uploader("OLD PDF", type=["pdf"])
-    f2 = st.file_uploader("NEW PDF", type=["pdf"])
+f1 = st.sidebar.file_uploader("OLD PDF", type=["pdf"])
+f2 = st.sidebar.file_uploader("NEW PDF", type=["pdf"])
 
-    if f1 and f2:
-        t1 = extract_pdf(f1)
-        t2 = extract_pdf(f2)
+if f1 and f2:
+    t1 = extract_pdf(f1)
+    t2 = extract_pdf(f2)
 
-        added = list(set(t2.split()) - set(t1.split()))[:20]
-        removed = list(set(t1.split()) - set(t2.split()))[:20]
+    added = list(set(t2.split()) - set(t1.split()))[:20]
+    removed = list(set(t1.split()) - set(t2.split()))[:20]
 
-        st.markdown("### 📌 Clause Changes")
-        st.write("➕ Added Clauses:", added)
-        st.write("➖ Removed Clauses:", removed)
+    st.sidebar.markdown("### 📌 Clause Changes")
+    st.sidebar.write("➕ Added Clauses:", added)
+    st.sidebar.write("➖ Removed Clauses:", removed)
 
-        st.markdown("### ⚖️ Risk Impact")
-        st.success("Risk Increased / Decreased (AI Estimated)")
-        st.info("New clauses detected may affect agreement validity")
-
-# ================= DOWNLOAD =================
-def make_pdf(text):
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer)
-    y = 800
-
-    for line in text.split("\n")[:40]:
-        c.drawString(40, y, line[:100])
-        y -= 15
-
-    c.save()
-    buffer.seek(0)
-    return buffer
-
-if st.button("⬇ Download Report") and st.session_state.chat:
-    text = "\n".join([m[1] for m in st.session_state.chat if m[0] == "ai"])
-    pdf = make_pdf(text)
-    st.download_button("Download Ready", pdf, "legal_report.pdf", "application/pdf")
+    st.sidebar.markdown("### ⚖️ Risk Impact")
+    st.sidebar.success("Risk Increased / Decreased (AI Estimated)")
+    st
