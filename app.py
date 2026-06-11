@@ -49,7 +49,9 @@ st.markdown("""
     border-radius:12px;
     border-left:4px solid #00d4ff;
     margin:10px 0;
-    box-shadow:0px 0px 10px rgba(0,212,255,0.4);
+    box-shadow:0px 0px 10px rgba(0,212,255,0.6);
+    font-weight:600;
+    color:#ff3d81;
 }
 .stButton>button {
     border-radius:14px;
@@ -130,26 +132,22 @@ def ask_ai(query):
     context = retrieve(query, all_chunks)
 
     if not context:
-        return "🧾 No relevant legal data found\n⚖️ Risk: Low"
+        return "<div class='card'>🧾 No relevant legal data found<br>⚖️ Risk: Low</div>"
 
     risk = risk_score(context)
     user_data["history_risk"].append(risk)
 
     return f"""
-🧾 Answer:
-Legal match found.
-
-⚖️ Reasoning:
-Semantic AI detected clauses.
-
-🚨 Risk Level:
-{risk}
-
-📌 Clauses:
-• {context[0] if len(context)>0 else 'N/A'}
-• {context[1] if len(context)>1 else 'N/A'}
-• {context[2] if len(context)>2 else 'N/A'}
+<div class='card'>
+🧾 <span style='color:#00d4ff'>Answer:</span> Legal match found.<br><br>
+⚖️ <span style='color:#a855f7'>Reasoning:</span> Semantic AI detected clauses.<br><br>
+🚨 <span style='color:#ff3d81'>Risk Level:</span> {risk}<br><br>
+📌 <span style='color:#00d4ff'>Clauses:</span><br>
+• {context[0] if len(context)>0 else 'N/A'}<br>
+• {context[1] if len(context)>1 else 'N/A'}<br>
+• {context[2] if len(context)>2 else 'N/A'}<br>
 • {context[3] if len(context)>3 else 'N/A'}
+</div>
 """
 
 # ================= TYPE WRITER =================
@@ -158,7 +156,7 @@ def type_writer(text):
     out = ""
     for c in text:
         out += c
-        box.markdown(f"<div class='card'>{out}</div>", unsafe_allow_html=True)
+        box.markdown(out, unsafe_allow_html=True)
         time.sleep(0.002)
 
 # ================= VOICE =================
@@ -205,7 +203,7 @@ for role, msg in user_data["chat"]:
     if role == "user":
         st.markdown(f"<div class='user'>🧑 {msg}<br><small>{datetime.now()}</small></div>", unsafe_allow_html=True)
     else:
-        st.markdown(f"<div class='ai'>🤖 {msg}<br><small>{datetime.now()}</small></div>", unsafe_allow_html=True)
+        st.markdown(msg, unsafe_allow_html=True)
 
 query = st.text_input("Ask Legal Question")
 col1, col2 = st.columns(2)
@@ -222,7 +220,7 @@ if send and query:
 
 if summary:
     thinking()
-    text = "📌 Document summary generated...\n⚖️ Risk: Medium\n📄 Legal clauses extracted"
+    text = "<div class='card'>📌 <span style='color:#00d4ff'>Document summary generated...</span><br>⚖️ <span style='color:#ff3d81'>Risk: Medium</span><br>📄 <span style='color:#a855f7'>Legal clauses extracted</span></div>"
     type_writer(text)
 
 st.subheader("📊 Risk Dashboard")
@@ -233,7 +231,6 @@ if user_data["history_risk"]:
     st.pyplot(fig)
 
 # ================= DOCUMENT COMPARISON (Separate Sidebar Section) =================
-# ================= DOCUMENT COMPARISON (Separate Sidebar Section) =================
 st.sidebar.title("⚖️ Document Comparison")
 
 f1 = st.sidebar.file_uploader("Upload OLD PDF", type=["pdf"], key="old_pdf")
@@ -241,35 +238,4 @@ f2 = st.sidebar.file_uploader("Upload NEW PDF", type=["pdf"], key="new_pdf")
 
 if f1 and f2:
     t1 = extract_pdf(f1)
-    t2 = extract_pdf(f2)
-
-    added = list(set(t2.split()) - set(t1.split()))[:20]
-    removed = list(set(t1.split()) - set(t2.split()))[:20]
-
-    st.sidebar.markdown("### 📌 Clause Changes")
-    st.sidebar.write("➕ Added Clauses:", added)
-    st.sidebar.write("➖ Removed Clauses:", removed)
-
-    st.sidebar.markdown("### ⚖️ Risk Impact")
-    st.sidebar.success("Risk Increased / Decreased (AI Estimated)")
-    st.sidebar.info("New clauses detected may affect agreement validity")
-
-    # ✅ Fixed string literal
-    report_text = "Added: " + " ".join(added) + "\nRemoved: " + " ".join(removed)
-
-    # Create PDF buffer
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer)
-    y = 800
-    for line in report_text.split("\n"):
-        c.drawString(40, y, line[:100])
-        y -= 15
-    c.save()
-    buffer.seek(0)
-
-    st.sidebar.download_button(
-        "⬇ Download Comparison Report",
-        buffer,
-        "comparison_report.pdf",
-        "application/pdf"
-    )
+    t2 = extract_pdf
