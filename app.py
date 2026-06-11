@@ -19,8 +19,6 @@ st.markdown("""
     background: radial-gradient(circle at top, #06142e, #020617, #0b0f1a);
     color: white;
 }
-
-/* TITLE */
 .title {
     font-size: 2.6rem;
     text-align: center;
@@ -29,8 +27,6 @@ st.markdown("""
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
-
-/* CHAT */
 .user {
     background: linear-gradient(90deg,#1e293b,#334155);
     padding:10px;
@@ -39,7 +35,6 @@ st.markdown("""
     text-align:right;
     color:#a7f3d0;
 }
-
 .ai {
     background: linear-gradient(90deg,#0f172a,#111827);
     padding:10px;
@@ -48,8 +43,6 @@ st.markdown("""
     border-left:3px solid #00d4ff;
     color:#e0f2fe;
 }
-
-/* CARD */
 .card {
     background:#0f172a;
     padding:14px;
@@ -58,8 +51,6 @@ st.markdown("""
     margin:10px 0;
     box-shadow:0px 0px 10px rgba(0,212,255,0.4);
 }
-
-/* BUTTONS */
 .stButton>button {
     border-radius:14px;
     padding:10px 16px;
@@ -76,7 +67,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='title'>⚖️ LexNavigator</div>", unsafe_allow_html=True)
+st.markdown("<div class='title'>⚖️ LexNavigator </div>", unsafe_allow_html=True)
 
 # ================= SESSION =================
 if "users" not in st.session_state:
@@ -201,7 +192,11 @@ if st.sidebar.button("🗑 Clear Memory"):
     user_data["chat"] = []
 
 if st.sidebar.button("⬇ Export Chat"):
-    st.sidebar.download_button("Download", "\n".join([m[1] for m in user_data["chat"]), "chat.txt")
+    st.sidebar.download_button(
+        "Download",
+        "\n".join([m[1] for m in user_data["chat"]]),
+        "chat.txt"
+    )
 
 # ================= CHAT =================
 st.subheader("💬 Chat Interface")
@@ -223,14 +218,10 @@ summary = col2.button("📌 Summary")
 # ================= SEND =================
 if send and query:
     user_data["chat"].append(("user", query))
-
     thinking()
-
     response = ask_ai(query)
-
     type_writer(response)
     speak(response)
-
     user_data["chat"].append(("ai", response))
 
 # ================= SUMMARY =================
@@ -258,13 +249,4 @@ if f1 and f2:
     t1 = extract_pdf(f1)
     t2 = extract_pdf(f2)
 
-    added = list(set(t2.split()) - set(t1.split()))[:20]
-    removed = list(set(t1.split()) - set(t2.split()))[:20]
-
-    st.sidebar.markdown("### 📌 Clause Changes")
-    st.sidebar.write("➕ Added Clauses:", added)
-    st.sidebar.write("➖ Removed Clauses:", removed)
-
-    st.sidebar.markdown("### ⚖️ Risk Impact")
-    st.sidebar.success("Risk Increased / Decreased (AI Estimated)")
-    st
+    added = list(set(t2
