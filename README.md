@@ -1,0 +1,21 @@
+# LexNavigator ⚖️
+
+AI-powered legal document assistant using Generative AI and Retrieval-Augmented Generation (RAG).
+
+## Features
+- Upload and analyze legal PDFs
+- Ask questions from documents
+- Semantic search using embeddings
+- Contract comparison tool
+- Multilingual responses (English, Hindi, Telugu)
+- Voice output using TTS
+
+## Tech Stack
+Python, Streamlit, Gemini API, FAISS, Sentence Transformers, NLP
+
+## How to Run
+1. Install dependencies:
+   pip install -r requirements.txt
+
+2. Run app:
+   streamlit run app.py
